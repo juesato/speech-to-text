@@ -15,10 +15,10 @@ For clips under 60 seconds, usage is simple:
 ```javascript
 var gspeech = require('gspeech-api');
 gspeech.recognize('path/to/my/file', function(err, data) {
-	if (err) 
-    	console.error(err);
+    if (err) 
+        console.error(err);
     console.log("Final transcript is:\n" + data.transcript);
-}
+});
 ```
 
 Google servers ignore clips over 60 seconds, so for clips longer than that, you have to specify how you want your audio files split into pieces. To use default package settings, the same code from above for clips under 60 seconds works.
@@ -46,8 +46,13 @@ This package exposes one main method, `gspeech.recognize(options, callback)` for
 ### Arguments
 
 ##### Options 
+
+If `options` is passed as a `String`, it is taken as the path for `file`. Otherwise, it should be an Object, which can have the following attributes:
+
  * `file` - path to the audio file to be transcribed.  
- * `segments` (optional) - `[{'start': float, 'duration': float}]` Specifies how to divide the audio file into segments before transcription. `start` and `duration` are floats specifying times in seconds. If this argument is not specified, the audio is split according to natural pauses.
+ * `segments` (optional) - `[start]` Specifies how to divide the audio file into segments before transcription. `start` is a `float` specifying a track time in seconds. If this argument is not specified, the audio is split into 60 second segments (the maximum length allowed by Google's servers). If a segment is longer than 60 seconds, it is split into 60 second segments.
+ * `maxDuration` (optional) - any segments longer than `maxDuration` will be split into segments of `maxDuration` seconds. Defaults to 15 seconds.
+ * `maxRetries` (optional) - sometimes Google servers do not respond correctly, if a segment is not processed correctly, it will be sent again `maxRetries` more times. Defaults to 1.
 
 #### Callback
 
@@ -55,50 +60,46 @@ Callback is a function which will be called after all requests to Google speech 
  * `err` - contains an error message, if error occurs
  * `data` - contains an Object with the following fields, if all requests are successful:
    * `transcript` - `String`: text of complete transcript
-   * `rawCaptions` - `[{'start': float, 'dur': float, 'text': String}]`: unprocessed text of each segment transcribed separately by Google speech servers. If `options.segments` is specified, each object corresponds to a segment; otherwise, each object designates how the audio file was split before being transcribed.
-   * `timedTranscript` - `[{'start': float, 'text': String}]`: timed transcript calculated from `rawCaptions` that determines the most likely text for each section of time with multiple possible transcriptions.
+   * `timedTranscript` - `[{'start': float, 'text': String}]`: unprocessed text of each segment transcribed separately by Google speech servers. If `options.segments` is specified, each object corresponds to a segment; otherwise, each object designates how the audio file was split before being transcribed. 
 
-
-### Examples
+### More Examples
 
 
 #### Getting a timed transcript
 
 ```javascript
 gspeech.recognize('path/to/my/file', function(err, data) {
-	if (err) 
-    	console.error(err);
+    if (err) 
+        console.error(err);
     for (var i = 0; i < data.timedTranscript.length; i++) {
-    	// Print the transcript
-    	console.log(data.timedTranscript[i].start + ': ' \
-        		  + data.timedTranscript[i].text + '\n');
+        // Print the transcript
+        console.log(data.timedTranscript[i].start + ': ' 
+                  + data.timedTranscript[i].text + '\n');
     }
-}
+});
 ```
 
-#### Minimal splitting of an audio file
+#### Specifying times to split audio
+
+If you would like to generate a timed transcript, and know where fragments start, specify these times to the library.
 
 ```javascript
-gspeech.recognize('path/to/my/file', function(err, data) {
-	if (err) 
-    	console.error(err);
-    for (var i = 0; i < data.timedTranscript.length; i++) {
-    	// Print the transcript
-    	console.log(data.timedTranscript[i].start + ': ' \
-        		  + data.timedTranscript[i].text + '\n');
+var segTimes = [0, 15, 20, 30];
+gspeech.recognize({
+        'file': 'path/to/my/file',
+        'segments': segTimes,
+    }, 
+    function(err, data) {
+        if (err) 
+            console.error(err);
+        for (var i = 0; i < data.timedTranscript.length; i++) {
+            console.log(data.timedTranscript[i].start + ': ' 
+            + data.timedTranscript[i].text + '\n');
+        }
     }
-}
+);
 ```
 
-### gspeech.getAudioLength(file)
-
-A helper method which returns the length of an audio file, in seconds.
-
-### Example
-
-```javascript
-
-```
 
 ## Disclaimer
 
