@@ -7,7 +7,6 @@ A node.js wrapper library around the [Google Speech API](https://www.google.com/
  * Unlimited requests to Google automatic speech recognition servers
  * Access to timed transcripts
 
-
 ## Basic Usage
 
 For clips under 60 seconds, usage is simple:
@@ -22,6 +21,8 @@ gspeech.recognize('path/to/my/file', function(err, data) {
 ```
 
 Google servers ignore clips over 60 seconds, so for clips longer than that, you have to specify how you want your audio files split into pieces. To use default package settings, the same code from above for clips under 60 seconds works.
+
+The speed varies, but in general, one hour of audio will take a couple minutes to process.
 
 ## Installation
 
@@ -53,6 +54,7 @@ If `options` is passed as a `String`, it is taken as the path for `file`. Otherw
  * `segments` (optional) - `[start]` Specifies how to divide the audio file into segments before transcription. `start` is a `float` specifying a track time in seconds. If this argument is not specified, the audio is split into 60 second segments (the maximum length allowed by Google's servers). If a segment is longer than 60 seconds, it is split into 60 second segments.
  * `maxDuration` (optional) - any segments longer than `maxDuration` will be split into segments of `maxDuration` seconds. Defaults to 15 seconds.
  * `maxRetries` (optional) - sometimes Google servers do not respond correctly, if a segment is not processed correctly, it will be sent again `maxRetries` more times. Defaults to 1.
+ * `limitConcurrent` (optional) - Google's servers communicate through separate GET and POST requests - sending too many requests at once may cause the two requests to not line up, resulting in errors. This defaults to 20.
 
 #### Callback
 

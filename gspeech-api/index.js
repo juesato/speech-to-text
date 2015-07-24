@@ -4,13 +4,15 @@
 	var temp = require("temp").track();
 	var ffmpeg = require('fluent-ffmpeg');
 	var async = require('async');
+	var http = require('http');
 
-	// var API_KEY = 'AIzaSyDpIPdx2BEmRMkYIF_2PVmnMN6-toj-klA'; // dev
-    var API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw"; // browser
+    var API_KEY = "AIzaSyBOti4mM-6x9WDnZIjIeyEU21OpBXqWBgw";
 
-
+	var MAX_CONCURRENT = 20;
 	var MAX_SEG_DUR = 15;
 	var POST_SAMPLE_RATE = 44100;
+
+	var DEBUG = true;
 
 	var gspeech = {};
 
@@ -46,9 +48,6 @@
 			'headers': {
 				'content-type': 'audio/x-flac; rate=' + POST_SAMPLE_RATE
 			},
-			'pool': {
-				'maxSockets': 10
-			}	
 		};	
 		var downstreamUrl = 'https://www.google.com/speech-api/full-duplex/v1/down';
 		var downstreamParams = urlEncode({
@@ -56,9 +55,6 @@
 		});
 		var downstreamOpts = {
 			'url': downstreamUrl + '?' + downstreamParams,
-			'pool': {
-				'maxSockets': 10
-			}
 		};
 		return [upstreamOpts, downstreamOpts];
 	}
@@ -66,10 +62,6 @@
 	function fullText(timedTranscript) {
 		var full = '';
 		for (var i = 0; i < timedTranscript.length; i++) {
-			if (typeof(timedTranscript[i].text) != 'string') {
-				console.log("NOT A STRING");
-				console.log(timedTranscript[i]);
-			}
 			full += timedTranscript[i].text + ' ';
 		}
 		return full;
@@ -89,53 +81,54 @@
 			var file_name = params.file;
 			var source = fs.createReadStream(file_name);
 			source.on('error', function (err) {onfinish(err);});
-			console.log("Sending " + file_name);
 			var opts = getRequestOptions();
 			var upstreamOpts = opts[0];
 			var downstreamOpts = opts[1];
-			// source.pipe(
-				request.post(upstreamOpts, function(error, res, body) {
-					if (error) {
-						onfinish(error);
-					}
-					// console.log("heard back from " + upstreamOpts.url)
-				}).on('socket', (function(sta) {
+			var postReq = request.post(upstreamOpts, function(error, res, body) {
+				if (error) {
+					onfinish(error);
+				}
+			});
+			if (DEBUG) {
+				postReq.on('socket', (function(sta) {
 					return function(socket) {
-						console.log("POST: " + sta);
+						console.log("POST SOCKET: " + sta);
+						socket.on("connect", function(conn) {
+							console.log("CONNECTION POST: " + sta);
+						});
 					}
-				})(params.start))
-			// );
+				})(params.start));				
+			}//END
 
-			request.get(downstreamOpts, function(error, res, body) {
+			source.pipe(postReq);
+
+			var getReq = request.get(downstreamOpts, function(error, res, body) {
 				if (error) {
 					onfinish(error);		
 				}
-				// console.log(body);
 				try {
 					var results = body.split('\n');
-					var last_result = JSON.parse(results[results.length-2]); // last result is empty, so grab the second last
+					var last_result = JSON.parse(results[results.length-2]); // last result is always an empty Array. Second to last is final transcript.
 					var text = last_result.result[0].alternative[0].transcript;
-					if (text.length < 80) {
-						console.log("short line");
-						console.log(results.length);
-					}
-					// console.log(text);
 					onfinish(null, {
 						'text': text,
 						'start': params.start,
 						'duration': params.duration
 					});
-					console.log("success");
 				}
 				catch (e) {
 					// If there is an error, the server posts HTML instead of JSON, which can't be parsed
-					console.log("error found");
-					console.log(body);
+					if (DEBUG) {
+						console.log("error found " + params.start);
+						console.log(body);						
+					}//ENDDEBUG
 
 					params.retries = params.retries | 0;
 					if (params.retries < maxRetries) {
 						params.retries++;
-						console.log("retry " + params.start);
+						if (DEBUG) {
+							console.log("retry " + params.start);
+						}//END
 						getTranscriptFromServer(params, onfinish);
 					}
 					else {
@@ -143,11 +136,17 @@
 							+ "for segment starting at second " + params.start));					
 					}
 				}
-			}).on('socket', (function(sta) {
-				return function(socket) {
-					console.log("Socket for second: " + sta);
-				}
-			})(params.start));
+			});
+			if (DEBUG) {
+				getReq.on('socket', (function(sta) {
+					return function(socket) {
+						console.log("GET SOCKET " + sta);
+						socket.on("connect", function(conn) {
+							console.log("CONNECTION GET: " + sta);
+						});
+					}
+				})(params.start));
+			}//ENDDEBUG
 		}
 
 		function processAudioSegment(data, onfinish) {
@@ -187,6 +186,7 @@
 	    var segments = options.segments;
 		var maxDuration = options.maxDuration | MAX_SEG_DUR;
 		var maxRetries = options.maxRetries | 1;
+		var limitConcurrent = options.limitConcurrent | MAX_CONCURRENT;
 		var retries = 0;
 
 		// Get file information and divide into segments
@@ -226,7 +226,7 @@
 				}    		
 	    	}
 
-			async.map(audioSegments, processAudioSegment, function(err, results) {
+			async.mapLimit(audioSegments, limitConcurrent, processAudioSegment, function(err, results) {
 				// After all transcripts have been returned, process them
 				if (err)
 					callback(err);

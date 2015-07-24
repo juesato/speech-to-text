@@ -10,6 +10,13 @@
     "type": "git",
     "url": "git+https://github.com/juesato/speech-to-text.git"
   },
+  "dependencies": {
+    "request": "*",
+    "fs": "*",
+    "temp": "*",
+    "async": "*",
+    "fluent-ffmpeg": "*"
+  },
   "author": "Jonathan Uesato <juesato@mit.edu>",
   "license": "MIT",
   "bugs": {
